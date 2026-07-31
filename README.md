@@ -20,11 +20,9 @@
 
 ## Визуализация
 
-| буферные зоны | поворот полигона |
+| Распределение конфликтов в Мали | Растровое представление конфликтов в Центральном Сахеле |
 |:---:|:---:|
-| <<img width="755" height="509" alt="image" src="https://github.com/user-attachments/assets/354a2885-8c92-4af0-a10b-6325e61e2198" />
-> | <<img width="784" height="522" alt="image" src="https://github.com/user-attachments/assets/d4d324fb-e02e-4cb5-b997-69945034cda1" />
-> |
+| <img width=100% height=100% alt="image" src="https://github.com/user-attachments/assets/354a2885-8c92-4af0-a10b-6325e61e2198" /> | <img width=100% height=100% alt="image" src="https://github.com/user-attachments/assets/d4d324fb-e02e-4cb5-b997-69945034cda1" />|
 
 ---
 
