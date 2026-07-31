@@ -1,0 +1,177 @@
+---
+title: "Mini Quiz"
+author: "Ivan Lopez"
+format: html
+editor: visual
+---
+
+### QUIZ
+
+- You will use the Zion National Park study data from `spDataLarge`: the park boundary (`zion.gpkg`), 30 random points inside the park (`zion_points`), and the Zion-area SRTM elevation raster (`srtm.tif`).
+
+- The quiz below tracks the lecture’s main themes: simplification, buffers and clipping, affine transformations.
+
+Use this setup chunk first.
+
+```{r}
+
+pacman::p_load(
+  spDataLarge,
+  sf,
+  terra,
+  tidyverse,
+  rmapshaper
+)
+
+# Read the Zion study-area data
+zion = read_sf(system.file("vector/zion.gpkg", package = "spDataLarge"))
+data("zion_points", package = "spDataLarge")
+srtm = rast(system.file("raster/srtm.tif", package = "spDataLarge"))
+
+# Put everything in a projected CRS so distances are in meters
+zion_utm = st_as_sf(project(vect(zion), "EPSG:32612"))
+zion_points_utm = st_as_sf(project(vect(zion_points), "EPSG:32612"))
+srtm_utm = project(srtm, "EPSG:32612")
+
+```
+
+## Question 1
+
+Write code that simplifies the Zion National Park boundary using `ms_simplify()`, keeping 5% of the original vertices while preserving shape. Then plot the original and simplified boundaries side by side.
+
+```{r}
+
+zion_utm_simp = rmapshaper::ms_simplify(
+  
+  zion_utm,
+                                          
+  keep = 0.05, # Just keep 5% of the vertices!
+                                          
+  keep_shapes = TRUE  # keep the original adjacency
+  
+  )
+
+plot(st_geometry(zion_utm), main="original")
+
+plot(st_geometry(zion_utm_simp), main="congruent-simp")
+
+packageVersion("Rcpp")
+```
+
+### Solution code
+
+```{r}
+
+zion_simpl = st_simplify(
+  zion_utm,
+  keep = 0.05,
+  keep_shapes = TRUE
+)
+
+par(mfrow = c(1, 2))
+plot(st_geometry(zion_utm), main = "Original")
+plot(st_geometry(zion_simpl), main = "Incongruent")
+par(mfrow = c(1, 1))
+```
+
+## Question 2
+
+Write code that creates a 750-meter buffer around each point in `zion_points_utm`, clips those buffers to the Zion park boundary, and plots the result.
+
+```{r}
+
+# Encapsulate the Seine River in a 5km buffer
+
+zion_buff_750m = st_buffer( #создания буферов (расширений вокруг геометрии).
+  
+  zion_points_utm,
+  
+  dist = 750
+  
+  )
+
+clip=st_intersection(zion_buff_750m, zion_utm)
+
+plot(st_geometry(zion_utm))
+plot(st_geometry(clip), add=TRUE, main="750 m")
+plot(st_geometry(zion_points_utm),add=T, main="15 km")
+```
+
+### Solution code
+
+```{r}
+
+zion_buffers = st_buffer(zion_points_utm, dist = 750)
+
+
+zion_buffers_clip = st_intersection(zion_buffers, zion_utm)
+
+plot(st_geometry(zion_utm), main = "750 m buffers clipped to Zion boundary")
+plot(st_geometry(zion_buffers_clip), add = TRUE, col = "lightblue", border = "blue")
+plot(st_geometry(zion_points_utm), add = TRUE, pch = 16, col = "red")
+
+
+```
+
+## Question 3
+
+Using an affine transformation, write code that rotates the Zion park boundary 15 degrees clockwise around the centroid of the whole park. Plot the original and rotated boundaries together.
+
+```{r}
+
+rotation = function(a){
+  
+  r = a * pi / 180 #degrees to radians
+  
+  matrix(
+    
+    c(
+      
+      cos(r),
+      
+      sin(r),
+      
+      -sin(r),
+      
+      cos(r)),
+    
+    nrow = 2,
+    
+    ncol = 2)
+  
+} 
+
+zion_sfc = st_geometry(zion_utm)
+
+whole=st_union(zion_sfc) # объединяет части карты в один геом объект
+
+whole_cent = st_centroid(whole)
+
+zion_rotate = (zion_sfc - whole_cent) * rotation(15) + whole_cent 
+
+plot(st_geometry(zion_utm), main = "rotation")
+
+plot(st_geometry(zion_rotate), add=T, border="red")
+```
+
+### Solution code
+
+```{r}
+
+cent = st_coordinates(st_centroid(st_union(zion_utm)))
+
+zion_centered = st_geometry(zion_utm) - cent
+
+theta = -15 * pi / 180
+rot_mat = matrix(
+  c(cos(theta), -sin(theta),
+    sin(theta),  cos(theta)),
+  nrow = 2,
+  byrow = TRUE
+)
+
+zion_rot = (zion_centered * rot_mat) + cent
+
+plot(st_geometry(zion_utm), main = "Original and rotated Zion boundary", border = "black")
+plot(zion_rot, add = TRUE, border = "red")
+```
