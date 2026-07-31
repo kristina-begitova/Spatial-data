@@ -22,9 +22,9 @@
 
 | буферные зоны | поворот полигона |
 |:---:|:---:|
-| <img src="<img width="760" height="513" alt="image" src="<img width="784" height="522" alt="image" src="https://github.com/user-attachments/assets/bdb0ee00-7bdb-46ed-9323-ead25524a451" />
-" />
-" width="100%"> | <img src="https://github.com/user-attachments/assets/IMAGE2" width="100%"> |
+| <<img width="755" height="509" alt="image" src="https://github.com/user-attachments/assets/354a2885-8c92-4af0-a10b-6325e61e2198" />
+> | <<img width="784" height="522" alt="image" src="https://github.com/user-attachments/assets/d4d324fb-e02e-4cb5-b997-69945034cda1" />
+> |
 
 ---
 
