@@ -1,6 +1,5 @@
 ---
 title: "Mini Quiz"
-author: "Ivan Lopez"
 format: html
 editor: visual
 ---
