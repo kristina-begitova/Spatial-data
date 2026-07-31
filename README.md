@@ -61,7 +61,6 @@
 
 ## Визуализация
 
-| буферные зоны | поворот полигона |
+| Буферные зоны | Поворот полигона |
 |:---:|:---:|
-| <img width=100% height=100% alt="image" src="https://github.com/user-attachments/assets/a41dfc69-113c-49d8-a866-6119965a070b" />
- | <img width=100% height=100% alt="image" src="https://github.com/user-attachments/assets/ace1b369-9751-4e29-a2c1-e9f8b99fcac0" />|
+| <img src="https://github.com/user-attachments/assets/a41dfc69-113c-49d8-a866-6119965a070b" width="100%"> | <img src="https://github.com/user-attachments/assets/ace1b369-9751-4e29-a2c1-e9f8b99fcac0" width="100%"> |
