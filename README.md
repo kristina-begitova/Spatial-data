@@ -32,3 +32,9 @@
 * вычисление центроида (`st_centroid`);
 * аффинные преобразования и поворот геометрии;
 * визуализация пространственных данных.
+
+## Визуализация
+
+| буферные зоны | поворот полигона |
+|:---:|:---:|
+| <img src="https://github.com/user-attachments/assets/IMAGE1" width="100%"> | <img src="https://github.com/user-attachments/assets/IMAGE2" width="100%"> |
