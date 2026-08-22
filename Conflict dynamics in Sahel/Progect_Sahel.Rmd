@@ -1,0 +1,1659 @@
+---
+title: "Conflict Dynamics in the Sahel"
+author: "Group 6"
+date: "2026-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Upload the necessary packages to work with the table data ACLED
+
+library(tidyverse)   # tidyverse package for data frame manipulation
+library(readr)      # works with csv format
+library(sf)        # vector data package   
+library(lubridate) # normalizing the dates
+library(ggplot2)   #create plots
+library(patchwork) #combine plots
+library(dplyr)    #works with data
+library(geodata)  #use for borders in Mali
+```
+
+# Introduction
+
+## Data preparation
+
+First, we prepared the data for analysis. We downloaded the ACLED dataset for 2025, as it is the most up-to-date.Checked its structure, including variable names and date formats. We removed observations with missing coordinates (latitude/longitude) from the sample and converted the data into a spatial format for mapping.
+
+Next, we created a new variable indicating whether violence was directed against civilians, based on which we classified violence by actor type and calculated the percentage distribution.
+
+We filtered the data by Mali, as we begin our analysis by replicating the report on violence in Mali: Wagner Group Operations in Africa: Civilian Targeting Trends in Mali (<https://acleddata.com/report/wagner-group-operations-africa-civilian-targeting-trends-central-african-republic-and-mali>)
+
+```{r}
+#Upload ACLED data
+ACLED_data <- read_csv("data/ACLED Data_2026-04-28.csv")
+
+#Data verification
+glimpse(ACLED_data) 
+colnames(ACLED_data) 
+head(ACLED_data) 
+
+```
+
+```{r}
+#check the dates
+class(ACLED_data$event_date)
+
+#Delete NA
+ACLED_data <- ACLED_data %>%
+  filter(!is.na(latitude), !is.na(longitude))
+
+#Spatial data
+ACLED_data_sf <- st_as_sf(ACLED_data,
+                     coords = c("longitude", "latitude"),
+                     crs = 4326)
+
+#Check data
+class(ACLED_data_sf)
+```
+
+```{r}
+
+#Creating a variable for the type of violence
+ACLED_data_sf <- ACLED_data_sf %>%
+  mutate(violence_type = case_when(
+    civilian_targeting == "Civilian targeting" ~ "Violence targeting civilians",
+    TRUE ~ "Other violence"
+  ))
+
+#Choose Mali
+mali_data <- ACLED_data_sf %>%
+  filter(country == "Mali")
+
+```
+
+```{r}
+#General data of violence type
+overall_type <- mali_data %>%
+  count(violence_type) %>%
+  mutate(percentage = n / sum(n) * 100,
+         actor_group = "Overall")
+
+#Data grouped by inter
+unique(mali_data$inter1)
+
+inter_type <- mali_data %>%
+  count(inter1, violence_type) %>%
+  group_by(inter1) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  ungroup()
+
+
+```
+
+## Percentage of organized political violence events targeting civilians by actor
+
+We have identified the main groups in Mali that use violence and we calculated the percentage ratio between violence against civilians and other violence for each group and for Mali as a whole. The chart is presented below.
+
+According to official data, Wagner left Mali in June 2025. Presumably, this is due to the loss of reputation due to the Prigozhin rebellion in Russia in 2023, which led to the creation of a new Africa Corps structure to replace Wagner.
+
+In the ACLED data, only the first 4 months of 2025 are available to us, due to our student status. During these months, Wagner was preparing his forces to leave Mali, so it is not present in the data. Also, Africa Corps has not appeared yet.
+
+We found it interesting to replicate the ACLED report for 2021-2022, but with new data from 2025 without Wagner's participation, to see how the departure affected the level of violence in Mali. For the same reason, we cannot use the 2024 data, as Wagner is still present in that dataset, and combining 2024 and 2025 would introduce bias into the results.
+
+### The difference between 2021-2022 and 2025
+
+The 2021-2022 ACLED report focused on Wagner's high level of violence against civilians. It is logical to assume that with Wagner's departure, the level of violence against civilians will become lower. All right. Of the four actors, only the Rebel group shows violence against civilians - the percentage remains exactly the same as in 2021-2022 (the difference is only 1%). State violence against civilians has stopped (0% compared to 20% in 2021-2022). Two new groups also do not show violence against civilians.
+
+```{r}
+
+# overall plot
+plot_overall <- ggplot(overall_type, aes("", percentage, fill = violence_type)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  geom_text(aes(label = paste0(round(percentage), "%")),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 5, fontface = "bold") +
+  coord_flip() +
+  scale_fill_manual(values = c(
+    "Violence targeting civilians" = "#F28E2B",
+    "Other violence" = "#4E79A7"
+  )) +
+  labs(title = "Overall", x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold", margin = margin(b = -10))
+  )
+
+# plot by type
+plot_inter <- ggplot(inter_type, aes("", percentage, fill = violence_type)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = paste0(round(percentage), "%")),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 4, fontface = "bold") +
+  facet_wrap(~ inter1) +
+  scale_fill_manual(
+  values = c(
+    "Violence targeting civilians" = "#F28E2B",
+    "Other violence" = "#4E79A7"
+  ),
+  breaks = c("Violence targeting civilians", "Other violence")
+) +
+  labs(y = "Percentage of events", x = NULL) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_blank(),
+    axis.ticks = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
+
+# combination
+plot_overall / plot_inter +
+  plot_layout(heights = c(1, 3)) +
+  plot_annotation(
+    title = "Percentage of organized political violence events targeting civilians by actor:\n1 January 2025 – 28 April 2025",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  )
+
+```
+
+## Violence events in Mali
+
+The ACLED report creates a distribution of event points on the map. As in 2021-2022, in 2025 the majority of events are concentrated in Segou and Mopti. Most of the events with violence against civilians are also located here. However, in 2025, events with violence against civilians also began to spread in Gao and Koulikoro, although there were isolated incidents in 2021-2022.
+
+```{r}
+
+# Mali map
+mali_admin1 <- geodata::gadm(country = "MLI", level = 1, path = tempdir()) %>%
+  st_as_sf()
+mali_border <- st_union(mali_admin1)
+
+# Events
+events_location <- mali_data %>%
+  group_by(geometry, violence_type) %>%
+  summarise(n_events = n(), .groups = "drop")
+
+# Use admin label for map)
+admin_labels <- mali_admin1 %>%
+  st_transform(3857) %>%
+  st_point_on_surface() %>%
+  st_transform(4326)
+
+ggplot() +
+  
+  geom_sf(data = mali_border,
+          fill = "#E8E4D9",
+          color = "#888888",
+          size = 0.3) +
+  
+  geom_sf(data = mali_admin1,
+        fill = NA,
+        color = "#BBBBBB",
+        size = 0.3
+        )+
+  
+  geom_sf_text(
+    data = admin_labels,
+    aes(label = NAME_1),
+    size = 2.5,
+    color = "black",
+    alpha = 0.7,
+    check_overlap = TRUE
+  ) +
+  
+  geom_sf(data = events_location,
+          aes(size = n_events, fill = violence_type),
+          shape = 21,
+          color = "black",
+          stroke = 0.3,
+          alpha = 0.85) +
+  
+  scale_fill_manual(values = c(
+    "Violence targeting civilians" = "#F28E2B",
+    "Other violence" = "#4E79A7"
+  )) +
+  
+  scale_size_area(max_size = 4) +
+  
+  labs(
+    title = "Violence events in Mali: 1 January 2025 – 28 April 2025",
+    fill = "Type of violence",
+    size = "Number of events",
+    x=NULL,
+    y=NULL
+  ) +
+  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    legend.position = "right"
+  )
+
+```
+
+Identify the areas with the highest concentration of events
+
+```{r}
+bbox_most_points <- st_bbox(c(
+  xmin = -7,
+  xmax = -2,
+  ymin = 12,
+  ymax = 16
+), crs = st_crs(mali_border))
+
+bbox_most_points_sf <- st_as_sfc(bbox_most_points)
+
+# Mali map
+mali_admin1 <- geodata::gadm(country = "MLI", level = 1, path = tempdir()) %>%
+  st_as_sf()
+mali_border <- st_union(mali_admin1)
+
+# Events
+events_location <- mali_data %>%
+  group_by(geometry, violence_type) %>%
+  summarise(n_events = n(), .groups = "drop")
+
+# Use admin label for map)
+admin_labels <- mali_admin1 %>%
+  st_transform(3857) %>%
+  st_point_on_surface() %>%
+  st_transform(4326)
+
+ggplot() +
+  
+  geom_sf(data = mali_border,
+          fill = "#E8E4D9",
+          color = "#888888",
+          size = 0.3) +
+  
+  geom_sf(data = mali_admin1,
+        fill = NA,
+        color = "#BBBBBB",
+        size = 0.3
+        )+
+  
+  geom_sf_text(
+    data = admin_labels,
+    aes(label = NAME_1),
+    size = 2.5,
+    color = "black",
+    alpha = 0.7,
+    check_overlap = TRUE
+  ) +
+  
+  geom_sf(data = events_location,
+          aes(size = n_events, fill = violence_type),
+          shape = 21,
+          color = "black",
+          stroke = 0.3,
+          alpha = 0.85) +
+  
+  geom_sf(data = bbox_most_points_sf,
+        fill = NA,
+        color = "black",
+        size = 0.8)+
+  
+  scale_fill_manual(values = c(
+    "Violence targeting civilians" = "#F28E2B",
+    "Other violence" = "#4E79A7"
+  )) +
+  
+  scale_size_area(max_size = 4) +
+  
+  labs(
+    title = "Violence events in Mali: 1 January 2025 – 28 April 2025",
+    fill = "Type of violence",
+    size = "Number of events",
+    x=NULL,
+    y=NULL
+  ) +
+  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    legend.position = "right"
+  )
+
+
+```
+
+```{r}
+
+events_location <- st_transform(events_location, st_crs(mali_admin1))
+
+mali_most_points <- st_intersection(mali_border, bbox_most_points_sf)
+admin1_most_points <- st_intersection(mali_admin1, bbox_most_points_sf)
+events_most_points <- st_intersection(events_location, bbox_most_points_sf)
+
+labels_most_points <- admin1_most_points %>%
+  st_transform(3857) %>%
+  st_point_on_surface() %>%
+  st_transform(4326)
+
+ggplot() +
+  geom_sf(data = mali_most_points,
+          fill = "#E8E4D9",
+          color = "#888888",
+          size = 0.3) +
+  
+  geom_sf(data = admin1_most_points,
+          fill = NA,
+          color = "#BBBBBB",
+          size = 0.3) +
+  geom_sf_text(
+          data = labels_most_points,
+          aes(label = NAME_1),
+          size = 4,
+          color = "black",
+          alpha = 0.8,
+          check_overlap = TRUE
+                               ) +
+  
+  geom_sf(data = events_most_points,
+          aes(size = n_events, fill = violence_type),
+          shape = 21,
+          color = "black",
+          stroke = 0.3,
+          alpha = 0.85) +
+  
+  scale_fill_manual(values = c(
+    "Violence targeting civilians" = "#F28E2B",
+    "Other violence" = "#4E79A7"
+  )) +
+  
+  scale_size_area(max_size = 8) +
+  
+  labs(x = NULL, y = NULL) +
+  
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+```
+
+## Violence events and fatalities in Mali
+
+The number of events and the number of fatalities are related, but the relationship is not too strong, most likely due to the fact that the time sample is not very large. Basically, there is a connection that if there were a lot of events in a period, then the number of deaths increases in the next period (in general, this is logical, for example, in events at the beginning of the month, people died and were injured, and in the middle of the month, deaths were taken into account).
+
+The ACLED report looks at how the number of events involving violence against civilians is related to fatalities. If we take into account only violence against civilians, the fatalities peaks occur at the ends of January and February. Compared to 2021-2022, the average number of events is about the same, and the number of fatalities is much lower.
+
+```{r}
+#English names
+#Sys.setlocale("LC_TIME", "C")
+
+#Identify 3 periods in month: Beginning, Middle and End
+mali_time <- mali_data %>%
+  mutate(
+    month = floor_date(event_date, "month"),
+    day = day(event_date),
+    period = case_when(
+      day <= 10 ~ "Beginning",
+      day <= 20 ~ "Middle",
+      TRUE ~ "End"
+    ),
+    period = factor(period, levels = c("Beginning", "Middle", "End")),  #required order of the periods
+    period_date = case_when(                                           #timeline
+      period == "Beginning" ~ month,
+      period == "Middle" ~ month + 10,
+      period == "End" ~ month + 20
+    )
+  ) %>%
+  group_by(month, period, period_date) %>%
+  summarise(
+    n_events = n(),
+    fatalities = sum(fatalities, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(period_date)  #sorts by time for the line chart
+
+scale_factor <- max(mali_time$n_events) / max(mali_time$fatalities) #scale for the construction of two axes
+
+ggplot(mali_time, aes(x = period_date)) +
+  
+  geom_col(aes(y = n_events, fill = period),
+           width = 8) +
+  
+  geom_line(aes(y = fatalities * scale_factor, color = "Fatalities"),
+          linewidth = 1)+
+
+  geom_point(aes(y = fatalities * scale_factor, color = "Fatalities"),
+           size = 2)+
+  
+  scale_y_continuous(   #2 axes
+    name = "Number of Events",
+    sec.axis = sec_axis(~./scale_factor, name = "Reported Fatalities")
+  ) +
+  
+  scale_color_manual(values = c(
+  "Fatalities" = "#E66100",
+   name = NULL
+))+
+  
+  scale_x_date(
+  breaks = unique(mali_time$month + 10),            #label month in the middle
+  labels = format(unique(mali_time$month), "%b")
+) +
+  
+  scale_fill_manual(values = c(
+    "Beginning" = "#264653",
+    "Middle" = "#2A9D8F",
+    "End" = "#E76F51"
+  )) +
+  
+  labs(
+    title = "Violence events and fatalities in Mali: 1 January 2025 – 28 April 2025",
+    fill = "Month period",
+    y=NULL,
+    x=NULL
+  ) +
+  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+```
+
+```{r}
+
+#Only Violence targeting civilians
+Sys.setlocale("LC_TIME", "C")
+
+mali_civilians <- mali_data %>%
+  filter(event_type == "Violence against civilians") %>%   
+  mutate(
+    month = floor_date(event_date, "month"),
+    day = day(event_date),
+    period = case_when(
+      day <= 10 ~ "Beginning",
+      day <= 20 ~ "Middle",
+      TRUE ~ "End"
+    ),
+    period = factor(period, levels = c("Beginning", "Middle", "End")),
+    period_date = case_when(
+      period == "Beginning" ~ month,
+      period == "Middle" ~ month + 10,
+      period == "End" ~ month + 20
+    )
+  ) %>%
+  group_by(month, period, period_date) %>%
+  summarise(
+    n_events = n(),
+    fatalities = sum(fatalities, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(period_date)
+
+
+scale_factor <- max(mali_civilians$n_events) / max(mali_civilians$fatalities)
+
+
+ggplot(mali_civilians, aes(x = period_date)) +
+  
+  geom_col(aes(y = n_events, fill = period),
+           width = 8) +
+  
+  geom_line(aes(y = fatalities * scale_factor, color = "Fatalities"),
+            linewidth = 1) +
+  
+  geom_point(aes(y = fatalities * scale_factor, color = "Fatalities"),
+             size = 2) +
+  
+  scale_y_continuous(
+    name = "Number of Events",
+    sec.axis = sec_axis(~./scale_factor, name = "Reported Fatalities")
+  ) +
+  
+  scale_color_manual(values = c("Fatalities" = "#E66100")) +
+  
+  scale_x_date(
+    breaks = unique(mali_civilians$month + 10),
+    labels = format(unique(mali_civilians$month), "%b")
+  ) +
+  
+  scale_fill_manual(values = c(
+    "Beginning" = "#264653",
+    "Middle" = "#2A9D8F",
+    "End" = "#E76F51"
+  )) +
+  
+  labs(
+    title = "Violence targeting civilians in Mali: 1 January 2025 – 28 April 2025",
+    fill = "Month period",
+    y = NULL,
+    x = NULL
+  ) +
+  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+```{r}
+# -----------------------------
+# PART 2: Our Own Analysis
+# Conflict diffusion from the Sahel toward coastal West Africa
+# -----------------------------
+
+library(tidyverse)
+library(sf)
+library(ggplot2)
+library(geodata)
+library(terra)
+library(tidyterra)
+library(patchwork)
+library(lubridate)
+```
+
+```{r}
+# Check available countries in the dataset
+unique(ACLED_data$country)
+```
+
+```{r}
+# Make sure event_date is a date
+ACLED_data <- ACLED_data %>%
+  mutate(event_date = as.Date(event_date))
+
+# Countries included in our regional analysis
+study_countries <- c(
+  "Mali",
+  "Burkina Faso",
+  "Niger",
+  "Benin",
+  "Togo",
+  "Nigeria"
+)
+
+# Convert ACLED data into sf object
+ACLED_data_sf_part2 <- ACLED_data %>%
+  filter(
+    country %in% study_countries,
+    !is.na(latitude),
+    !is.na(longitude)
+  ) %>%
+  st_as_sf(
+    coords = c("longitude", "latitude"),
+    crs = 4326,
+    remove = FALSE
+  )
+
+# Keep only organized political violence events
+sahel_violence <- ACLED_data_sf_part2 %>%
+  filter(event_type %in% c(
+    "Battles",
+    "Explosions/Remote violence",
+    "Violence against civilians"
+  ))
+
+# Check result
+sahel_violence %>%
+  st_drop_geometry() %>%
+  count(country, event_type)
+```
+
+```{r}
+# Download country boundaries from GADM
+
+mali <- geodata::gadm(country = "MLI", level = 0, path = tempdir()) %>% 
+  st_as_sf()
+
+burkina <- geodata::gadm(country = "BFA", level = 0, path = tempdir()) %>% 
+  st_as_sf()
+
+niger <- geodata::gadm(country = "NER", level = 0, path = tempdir()) %>% 
+  st_as_sf()
+
+benin <- geodata::gadm(country = "BEN", level = 0, path = tempdir()) %>% 
+  st_as_sf()
+
+togo <- geodata::gadm(country = "TGO", level = 0, path = tempdir()) %>% 
+  st_as_sf()
+
+nigeria <- geodata::gadm(country = "NGA", level = 0, path = tempdir()) %>% 
+  st_as_sf()
+
+region_borders <- bind_rows(
+  mali,
+  burkina,
+  niger,
+  benin,
+  togo,
+  nigeria
+)
+
+region_borders$NAME_0
+```
+
+```{r}
+ggplot() +
+  geom_sf(
+    data = region_borders,
+    fill = "#EFEAE0",
+    color = "gray45",
+    linewidth = 0.3
+  ) +
+  geom_sf(
+    data = sahel_violence,
+    aes(color = event_type),
+    size = 1.4,
+    alpha = 0.75
+  ) +
+  scale_color_manual(values = c(
+    "Battles" = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title = "Political violence events in the central Sahel and southern frontier",
+    subtitle = "ACLED events, January–April 2025",
+    color = "Event type",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    panel.grid = element_blank()
+  )
+```
+
+```{r}
+events_by_country <- sahel_violence %>%
+  st_drop_geometry() %>%
+  count(country, event_type) %>%
+  group_by(country) %>%
+  mutate(total_events = sum(n)) %>%
+  ungroup()
+
+ggplot(events_by_country, aes(
+  x = reorder(country, total_events),
+  y = n,
+  fill = event_type
+)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c(
+    "Battles" = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title = "Number of political violence events by country",
+    subtitle = "Central Sahel and southern frontier, January–April 2025",
+    x = NULL,
+    y = "Number of events",
+    fill = "Event type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom"
+  )
+```
+
+```{r}
+southern_frontier_countries <- c(
+  "Benin",
+  "Togo",
+  "Nigeria"
+)
+
+southern_frontier_events <- sahel_violence %>%
+  filter(country %in% southern_frontier_countries)
+
+southern_frontier_borders <- region_borders %>%
+  filter(COUNTRY %in% c("Benin", "Togo", "Nigeria"))
+
+ggplot() +
+  geom_sf(
+    data = southern_frontier_borders,
+    fill = "#EFEAE0",
+    color = "gray45",
+    linewidth = 0.3
+  ) +
+  geom_sf(
+    data = southern_frontier_events,
+    aes(color = event_type),
+    size = 2,
+    alpha = 0.85
+  ) +
+  scale_color_manual(values = c(
+    "Battles" = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title = "Political violence events along the southern frontier",
+    subtitle = "Benin, Togo, and Nigeria, January–April 2025",
+    color = "Event type",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    panel.grid = element_blank()
+  )
+```
+
+```{r}
+# Create country labels
+
+country_labels <- region_borders %>%
+  st_transform(3857) %>%
+  st_point_on_surface() %>%
+  st_transform(4326)
+
+# Regional map with country labels
+
+ggplot() +
+  geom_sf(
+    data = region_borders,
+    fill = "#EFEAE0",
+    color = "gray45",
+    linewidth = 0.3
+  ) +
+  geom_sf_text(
+    data = country_labels,
+    aes(label = COUNTRY),
+    size = 3,
+    color = "black",
+    fontface = "bold",
+    check_overlap = TRUE
+  ) +
+  geom_sf(
+    data = sahel_violence,
+    aes(color = event_type),
+    size = 1.3,
+    alpha = 0.7
+  ) +
+  scale_color_manual(values = c(
+    "Battles" = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title = "Conflict diffusion from the central Sahel toward the southern frontier",
+    subtitle = "ACLED political violence events, January–April 2025",
+    color = "Event type",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    panel.grid = element_blank()
+  )
+```
+
+```{r}
+# Transform to projected CRS for raster/grid calculation
+region_borders_3857 <- st_transform(region_borders, 3857)
+sahel_violence_3857 <- st_transform(sahel_violence, 3857)
+
+# Convert to terra vector
+region_vect <- vect(region_borders_3857)
+events_vect <- vect(sahel_violence_3857)
+
+# Create empty raster over the study area
+# Resolution: 50 km x 50 km
+conflict_raster_template <- rast(
+  ext(region_vect),
+  resolution = 50000,
+  crs = crs(region_vect)
+)
+
+# Add value of 1 to each event
+events_vect$event_count <- 1
+
+# Rasterize event counts
+conflict_density_raster <- rasterize(
+  events_vect,
+  conflict_raster_template,
+  field = "event_count",
+  fun = "sum",
+  background = 0
+)
+
+# Mask raster to study region
+conflict_density_raster <- mask(conflict_density_raster, region_vect)
+
+conflict_density_raster
+```
+
+```{r}
+ggplot() +
+  geom_spatraster(data = conflict_density_raster) +
+  geom_sf(
+    data = region_borders_3857,
+    fill = NA,
+    color = "gray35",
+    linewidth = 0.3
+  ) +
+  scale_fill_viridis_c(
+    name = "Number of events\nper grid cell",
+    na.value = NA
+  ) +
+  labs(
+    title = "Rasterized conflict intensity in the central Sahel and southern frontier",
+    subtitle = "ACLED political violence events aggregated into 50 km grid cells",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "right",
+    panel.grid = element_blank()
+  )
+```
+
+```{r}
+ggplot() +
+  geom_spatraster(data = conflict_density_raster) +
+  geom_sf(
+    data = region_borders_3857,
+    fill = NA,
+    color = "gray35",
+    linewidth = 0.3
+  ) +
+  geom_sf(
+    data = sahel_violence_3857,
+    aes(color = event_type),
+    size = 0.8,
+    alpha = 0.7
+  ) +
+  scale_fill_viridis_c(
+    name = "Number of events\nper grid cell",
+    na.value = NA
+  ) +
+  scale_color_manual(values = c(
+    "Battles" = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title = "Conflict intensity and event types in the central Sahel and southern frontier",
+    subtitle = "Rasterized event density with ACLED event points overlaid",
+    color = "Event type",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    panel.grid = element_blank()
+  )
+```
+
+```{r}
+sahel_violence_3857$fatalities_clean <- ifelse(
+  is.na(sahel_violence_3857$fatalities),
+  0,
+  sahel_violence_3857$fatalities
+)
+
+events_vect_fatalities <- vect(sahel_violence_3857)
+
+fatalities_raster <- rasterize(
+  events_vect_fatalities,
+  conflict_raster_template,
+  field = "fatalities_clean",
+  fun = "sum",
+  background = 0
+)
+
+fatalities_raster <- mask(fatalities_raster, region_vect)
+
+ggplot() +
+  geom_spatraster(data = fatalities_raster) +
+  geom_sf(
+    data = region_borders_3857,
+    fill = NA,
+    color = "gray35",
+    linewidth = 0.3
+  ) +
+  scale_fill_viridis_c(
+    name = "Fatalities\nper grid cell",
+    na.value = NA
+  ) +
+  labs(
+    title = "Rasterized conflict severity in the central Sahel and southern frontier",
+    subtitle = "Reported fatalities aggregated into 50 km grid cells",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "right",
+    panel.grid = element_blank()
+  )
+```
+
+```{r}
+sahel_violence_region <- sahel_violence %>%
+  mutate(region_group = case_when(
+    country %in% c("Mali", "Burkina Faso", "Niger") ~ "Central Sahel",
+    country %in% c("Benin", "Togo", "Nigeria") ~ "Southern frontier",
+    TRUE ~ "Other"
+  ))
+
+region_summary <- sahel_violence_region %>%
+  st_drop_geometry() %>%
+  group_by(region_group) %>%
+  summarise(
+    total_events = n(),
+    total_fatalities = sum(fatalities, na.rm = TRUE),
+    violence_against_civilians = sum(event_type == "Violence against civilians", na.rm = TRUE),
+    .groups = "drop"
+  )
+
+region_summary
+```
+
+```{r}
+ggplot(region_summary, aes(
+  x = region_group,
+  y = total_events,
+  fill = region_group
+)) +
+  geom_col(width = 0.6) +
+  scale_fill_manual(values = c(
+    "Central Sahel" = "#D95F02",
+    "Southern frontier" = "#1B9E77"
+  )) +
+  labs(
+    title = "Political violence remains concentrated in the central Sahel",
+    subtitle = "Comparison between central Sahel and southern frontier, January–April 2025",
+    x = NULL,
+    y = "Number of events",
+    fill = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "none"
+  )
+```
+
+```{r}
+event_type_region <- sahel_violence_region %>%
+  st_drop_geometry() %>%
+  count(region_group, event_type) %>%
+  group_by(region_group) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  ungroup()
+
+ggplot(event_type_region, aes(
+  x = region_group,
+  y = percentage,
+  fill = event_type
+)) +
+  geom_col(width = 0.6) +
+  scale_fill_manual(values = c(
+    "Battles" = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title = "Composition of political violence by regional group",
+    subtitle = "Central Sahel compared with the southern frontier",
+    x = NULL,
+    y = "Percentage of events",
+    fill = "Event type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom"
+  )
+```
+
+# Temporal Analysis: Monthly Progression of Violence
+
+## Overview
+
+The preceding analysis treated January–April 2025 as a single spatial snapshot. This section adds the missing temporal dimension by disaggregating events by month. Two questions guide this analysis: (1) Did the spatial footprint of violence expand, contract, or shift between January and April? (2) Do the central Sahel and southern frontier follow the same monthly rhythm, or do they diverge — which would strengthen or complicate the diffusion argument?
+
+## Monthly progression maps (small multiples)
+
+```{r temporal-monthly-maps}
+# Add month variable to the sahel_violence dataset
+sahel_violence_monthly <- sahel_violence %>%
+  mutate(month_num  = month(event_date),
+         month_label = factor(month.name[month_num],
+                              levels = month.name[1:4]))  # Jan–Apr only
+
+# Confirm we have data for all four months
+sahel_violence_monthly %>%
+  st_drop_geometry() %>%
+  count(month_label)
+
+# Four small-multiple maps — one per month
+ggplot() +
+  geom_sf(
+    data     = region_borders,
+    fill     = "#EFEAE0",
+    color    = "gray45",
+    linewidth = 0.3
+  ) +
+  geom_sf(
+    data  = sahel_violence_monthly,
+    aes(color = event_type),
+    size  = 0.9,
+    alpha = 0.70
+  ) +
+  facet_wrap(~ month_label, nrow = 2) +
+  scale_color_manual(values = c(
+    "Battles"                    = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title    = "Monthly progression of political violence: January–April 2025",
+    subtitle = "Each panel shows ACLED events for one month across the study region",
+    color    = "Event type",
+    x = NULL, y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    panel.grid    = element_blank(),
+    strip.text    = element_text(face = "bold", size = 11)
+  )
+```
+
+## Temporal decomposition by region
+
+```{r temporal-region-decomposition}
+# Aggregate monthly event counts by region group
+monthly_region <- sahel_violence_monthly %>%
+  st_drop_geometry() %>%
+  mutate(region_group = case_when(
+    country %in% c("Mali", "Burkina Faso", "Niger") ~ "Central Sahel",
+    country %in% c("Benin", "Togo", "Nigeria")      ~ "Southern Frontier",
+    TRUE ~ "Other"
+  )) %>%
+  count(month_label, region_group, event_type) %>%
+  group_by(month_label, region_group) %>%
+  mutate(total_month = sum(n)) %>%
+  ungroup()
+
+# Line chart: monthly event totals by region
+monthly_totals <- monthly_region %>%
+  distinct(month_label, region_group, total_month)
+
+ggplot(monthly_totals,
+       aes(x = month_label, y = total_month,
+           color = region_group, group = region_group)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c(
+    "Central Sahel"    = "#D95F02",
+    "Southern Frontier" = "#1B9E77"
+  )) +
+  labs(
+    title    = "Monthly event totals by region: January–April 2025",
+    subtitle = "Do the central Sahel and southern frontier follow the same rhythm?",
+    x        = NULL,
+    y        = "Number of events",
+    color    = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    legend.position = "bottom"
+  )
+
+# Stacked bar: monthly composition of violence by region
+ggplot(monthly_region,
+       aes(x = month_label, y = n, fill = event_type)) +
+  geom_col(position = "stack") +
+  facet_wrap(~ region_group, scales = "free_y") +
+  scale_fill_manual(values = c(
+    "Battles"                    = "#D95F02",
+    "Explosions/Remote violence" = "#7570B3",
+    "Violence against civilians" = "#E7298A"
+  )) +
+  labs(
+    title    = "Monthly composition of violence by regional group",
+    subtitle = "Central Sahel vs. southern frontier, January–April 2025",
+    x        = NULL,
+    y        = "Number of events",
+    fill     = "Event type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5),
+    strip.text    = element_text(face = "bold"),
+    legend.position = "bottom",
+    axis.text.x   = element_text(angle = 30, hjust = 1)
+  )
+```
+
+# Resources and Conflicts
+
+The goal of this part is to analyze the potential links between the presence of natural resources and violences agasint civilians. This part of the work was based on the postulate that in a region where natural resources are scarce, there must be a link between their presence and the potentiality of conflict.
+
+Conclusion header : It seems that there is no correlation between gold mining sites and the repartition of violent events (including violences against civilians, battles and explosion/ remote violence and strategic developments).
+
+## Data Origin
+
+To do so, we required another set of data that presented geolocated characteristics for mineral data and especially location of mining sites. Not being able to find such data in ACLED, we turned to another organization that was able to provide such information : USGS : a US governmental organization known as US Geological Surveys. Following here the link where to retrieve the data:
+
+<https://data.usgs.gov/datacatalog/data/USGS:607611a9d34e018b3201cbbf>
+
+## Getting started
+
+```{r}
+
+# PART 3 : Gold Mines and Conflicts in the Sahel region
+
+# Starting
+
+# First we load the libraries we will need. ALready done earlier, but still, if this part of the code is cut off from the rest it will be needed.
+
+library(tidyverse)
+library(sf)
+library(ggplot2)
+
+# We create the variable we'll use 
+
+acled <-  read_csv("data/ACLED Data_2026-04-28.csv")
+
+# Simple verifications 
+
+glimpse(ACLED_data) 
+colnames(ACLED_data) 
+head(ACLED_data) 
+
+```
+
+**GIS Data**
+
+Here we are setting up the first steps to load, and then filter our data sets.
+
+```{r}
+
+# Convert to spatial object
+
+acled_sf <- st_as_sf(acled, coords = c("longitude", "latitude"), crs = 4326)
+
+
+# Load GIS layers from geodatabase
+
+mines      <- st_read("Africa_GIS.gdb", layer = "AFR_Mineral_Deposits")
+facilities <- st_read("Africa_GIS.gdb", layer = "AFR_Mineral_Facilities")
+admin0     <- st_read("Africa_GIS.gdb", layer = "AFR_Political_ADM0_Boundaries")
+admin1     <- st_read("Africa_GIS.gdb", layer = "AFR_Political_ADM1_Boundaries")
+
+```
+
+Here we are harmonizing the distances.
+
+Firstly I did not want to do this as it sometimes works well in the courses and other analysis I did. but as the data used comes from two different organizations and have different formats, I thought it would be more reliable to proceed like this.
+
+```{r}
+
+# Harmonise all layers to CRS 4326 (WGS 84)
+
+mines      <- st_transform(mines,      4326)
+facilities <- st_transform(facilities, 4326)
+admin0     <- st_transform(admin0,     4326)
+admin1     <- st_transform(admin1,     4326)
+acled_sf   <- st_transform(acled_sf,   4326)
+
+```
+
+Now we compute distances between conflict events and mineral deposits, and flag events within a 10 km buffer around mines.
+
+```{r}
+
+# Spatial analysis: distances and buffer
+
+# Compute minimum distance (in meters) from each event to the nearest mine
+
+distances <- st_distance(acled_sf, mines)
+acled_sf$dist_to_mine <- apply(distances, 1, min)
+
+
+# Create a 10 km buffer around mines
+
+mine_buffer <- st_buffer(mines, 10000)
+
+
+# Spatial join: identify conflict events located inside the mine buffer
+
+acled_in_buffer <- st_join(acled_sf, mine_buffer, join = st_within)
+
+
+# Label each event as "near" (<10 km) or "far" from a mine
+
+acled_sf$near_mine <- ifelse(acled_sf$dist_to_mine < 10000, "near", "far")
+
+```
+
+First analysis filtering :
+
+```{r}
+
+# Filter to Sahel-Sahara Belt countries
+
+sahel <- c("Algeria", "Senegal", "Mauritania", "Mali", "Burkina Faso",
+           "Niger", "Nigeria", "Chad", "Cameroon",
+           "Sudan", "Eritrea", "Cape Verde", "Togo")
+
+# Creating useful variables
+
+admin0_sahel <- admin0 %>% filter(Country %in% sahel)
+acled_sahel  <- st_intersection(acled_sf, admin0_sahel)
+mines_sahel  <- st_intersection(mines,    admin0_sahel)
+
+```
+
+## **Map 1 : Sahel-Sahara Belt mining sites and conflict**
+
+Mapping Sahara-Sahel Belt. Before we filter the data to the Sahel region and produce a cleaner final map, we need to build centroids to plot countries names in the good area and obtain the clean final map.
+
+**Be prepared : centroids**
+
+```{r}
+
+# Build centroids for country labels
+
+centroids_sf <- admin0_sahel %>%
+  st_transform(3857) %>%
+  st_centroid() %>%
+  st_transform(4326)
+
+
+# Extract coordinates into separate columns
+
+centroids_df <- centroids_sf
+centroids_df$X <- st_coordinates(centroids_sf)[, 1]
+centroids_df$Y <- st_coordinates(centroids_sf)[, 2]
+centroids_df <- st_drop_geometry(centroids_df)
+
+
+# Manually moving to avoid overlapping labels
+
+centroids_df$X_plot <- centroids_df$X
+centroids_df$Y_plot <- centroids_df$Y
+
+# here I place in the good area the names of the countires  by manually moving them by 1.5 or 0.5 points.
+
+centroids_df$X_plot[centroids_df$Country == "Burkina Faso"] <- centroids_df$X[centroids_df$Country == "Burkina Faso"] - 1.5
+centroids_df$X_plot[centroids_df$Country == "Cameroon"]     <- centroids_df$X[centroids_df$Country == "Cameroon"] - 0.5
+
+# Here is the same process for other countries names
+
+centroids_df$Y_plot[centroids_df$Country == "Togo"]         <- centroids_df$Y[centroids_df$Country == "Togo"] - 3
+centroids_df$Y_plot[centroids_df$Country == "Eritrea"]      <- centroids_df$Y[centroids_df$Country == "Eritrea"] - 2
+centroids_df$Y_plot[centroids_df$Country == "Cameroon"]     <- centroids_df$Y[centroids_df$Country == "Cameroon"] - 1
+centroids_df$Y_plot[centroids_df$Country == "Burkina Faso"] <- centroids_df$Y[centroids_df$Country == "Burkina Faso"] - 3
+
+```
+
+**Plotting**
+
+Now we can plot.
+
+Firstly I tried to plot a whole Africa map, then I restraint my analysis to the Sahel region that we are interested in.
+
+After a couple of try, I decided to plot the names of the countries.
+
+In a third wave of events I succeded in plotting them in the right area, after a few researches and the use of the centroids, created in the code chunk above.
+
+```{r}
+
+# Here is the final version of the map plotting of the Sahel region and the violent events, correlated (or not) to the location of gold mining sites.
+
+ggplot() +
+  geom_sf(data = admin0_sahel, fill = "grey95", color = "black", linewidth = 0.2) +
+  geom_sf(data = mines_sahel,  aes(color = "Mining sites"),    size = 1,   alpha = 0.6) +
+  geom_sf(data = acled_sahel,  aes(color = "Violent events"),  size = 0.5, alpha = 0.4) +
+  geom_text(
+    data = centroids_df,
+    aes(x = X_plot, y = Y_plot, label = Country),
+    size = 3
+  ) +
+  
+  geom_sf(
+    data      = st_as_sfc(st_bbox(c(xmin = -7, xmax = 3, ymin = 10, ymax = 16), crs = 4326)),
+    fill      = NA,
+    color     = "black",
+    linewidth = 0.6
+  ) +
+  
+  scale_color_manual(values = c("Mining sites" = "gold", "Violent events" = "red")) +
+  labs(color = NULL) +
+  theme_void() +
+  theme(legend.text = element_text(size = 10))
+
+# By creating these tiny categories "Mining sites" and "Violent events", we are plotting the color to the dots instead of just using color = "gold" etc.
+
+```
+
+## Map 2 : AES mines and conflict
+
+Now that we have this first map, let's focus on the AES case. AES is the "Alliance des Etats du Sahel" otherwise known as "Sahel States Alliance". This military and political alliance is composed of Mali, Burkina Faso and Niger. Same as before, the red dots representing the violent events are smaller so we can better perceivr where are mining sites situated.
+
+**Filtering**
+
+```{r}
+
+# Filter to AES countries
+
+aes <- c("Niger", "Mali", "Burkina Faso")
+
+admin0_aes <- admin0 %>% filter(Country %in% aes)
+acled_aes  <- st_intersection(acled_sf, admin0_aes)
+mines_aes  <- st_intersection(mines,    admin0_aes)
+
+```
+
+**Plotting**
+
+```{r}
+
+# Plotting it :
+
+ggplot() +
+  geom_sf(data = admin0_aes, fill = "grey95", color = "black", linewidth = 0.2) +
+  geom_sf(data = mines_aes,  color = "gold", size = 1,   alpha = 0.6) +
+  geom_sf(data = acled_aes,  color = "red",  size = 0.6, alpha = 0.4) +
+  geom_sf_text(data = admin0_aes, aes(label = Country), size = 3) +
+  theme_void()
+
+# Adding the legend 
+
+ggplot() +
+  geom_sf(data = admin0_aes, fill = "grey95", color = "black", linewidth = 0.2) +
+  
+  # aes(color = "...") is what creates the legend entries
+  geom_sf(data = mines_aes, aes(color = "Gold mines"),    size = 1,   alpha = 0.6) +
+  geom_sf(data = acled_aes, aes(color = "Violent events"), size = 0.6, alpha = 0.4) +
+  
+  geom_sf_text(data = admin0_aes, aes(label = Country), size = 3) +
+  
+  # We manually assign the colours to each legend label
+  scale_color_manual(values = c("Gold mines"     = "gold",
+                                "Violent events" = "red")) +
+  
+  labs(color = NULL) +   # removes the legend title
+  
+  theme_void() +
+  theme(legend.text = element_text(size = 10))
+
+
+```
+
+## Map 3 : Mali case
+
+```{r}
+
+# Filter to Mali only
+
+admin0_mali <- admin0 %>% filter(Country == "Mali")
+acled_mali  <- st_intersection(acled_sf, admin0_mali)
+mines_mali  <- st_intersection(mines,    admin0_mali)
+
+
+# Plot
+
+ggplot() +
+  geom_sf(data = admin0_mali,  fill = "grey95", color = "black", linewidth = 0.2) +
+  
+  
+# District borders
+  
+  geom_sf(data = mali_admin1,  fill = NA, color = "#BBBBBB", size = 0.3) +
+  
+
+# District names : we use the same method as the second chunk
+  
+  geom_sf_text(data = mali_admin1, aes(label = NAME_1),
+               size = 2.5, color = "black", alpha = 0.7, check_overlap = TRUE) +
+  
+  
+# Points with aes(color=) to feed the legend
+  
+  geom_sf(data = mines_mali,  aes(color = "Mining sites"),  size = 1.3, alpha = 0.9) +
+  geom_sf(data = acled_mali,  aes(color = "Violent events"), size = 0.6, alpha = 0.4) +
+  
+  scale_color_manual(values = c("Mining sites"  = "gold",
+                                "Violent events" = "red")) +
+  labs(color = NULL) +
+  theme_void() +
+  theme(legend.text = element_text(size = 10))
+
+
+```
+
+## Conclusion
+
+We can see that in Mali and broader speaking, in the Sahel region, there is no evidence of a link between gold mining sites and violent events.
+
+# ANALYSIS: Correlation between Distance to Cities and Violence
+
+#From now on, since we have seen that there does not seem to be any correlation between mines and the location of attacks, we will try to determine whether there is a link between attacks and their distance from cities.
+
+# Required packages
+
+```{r}
+library(scales) # formatting axis labels (comma notation on log scale)
+library(maps) # provides world.cities dataset used to compute distances to nearest city
+```
+
+```{r}
+# 1. Loading and cleaning ACLED data
+acled <- read_csv("data/ACLED Data_2026-04-28.csv")
+
+# Keep only violent events (excluding strategic developments)
+pays_sahel <- c("Burkina Faso", "Mali", "Niger")
+
+acled_violence <- acled %>%
+  filter(event_type %in% c("Battles",
+                            "Explosions/Remote violence",
+                            "Violence against civilians")) %>%
+  filter(country %in% pays_sahel) %>%
+  # Remove rows with missing coordinates
+  filter(!is.na(latitude), !is.na(longitude))
+
+# Convert to spatial object (WGS84 coordinate system)
+acled_sf <- st_as_sf(acled_violence,
+                     coords = c("longitude", "latitude"),
+                     crs = 4326)
+```
+
+```{r}
+# 2. Filter city data for Sahel countries
+data("world.cities", package = "maps")
+villes_raw <- world.cities
+
+villes_sahel <- villes_raw %>%
+  filter(country.etc %in% pays_sahel) %>%
+  select(name, country = country.etc, pop, latitude = lat, longitude = long) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+```
+
+```{r}
+# 3. Computing minimum distance to a city
+# Project to UTM zone 30N (EPSG:32630) to work in meters
+acled_proj  <- st_transform(acled_sf,     crs = 32630)
+villes_proj <- st_transform(villes_sahel, crs = 32630)
+
+# st_distance() returns a matrix [events x cities]
+# Keep the minimum distance for each event (converted to km)
+dist_matrix <- st_distance(acled_proj, villes_proj)
+dist_min_km  <- apply(dist_matrix, 1, min) / 1000
+
+# Add distance column to the main dataset
+acled_violence$dist_km <- dist_min_km
+
+```
+
+```{r}
+# 4. Descriptive exploration
+
+#Distribution of minimum distance to a city
+hist_dist <- ggplot(acled_violence, aes(x = dist_km)) +
+  geom_histogram(bins = 50, fill = "#E07B54", color = "white") +
+  labs(title = "Distribution of Distance to Nearest City",
+       x = "Distance to nearest city (km)",
+       y = "Number of events") +
+  theme_minimal()
+
+hist_dist
+
+# Events by distance brackets (25 km intervals)
+acled_violence <- acled_violence %>%
+  mutate(dist_bin = cut(dist_km,
+                        breaks = c(0, 25, 50, 75, 100, 150, 200, 300, Inf),
+                        labels = c("0-25", "25-50", "50-75",
+                                   "75-100", "100-150", "150-200",
+                                   "200-300", ">300"),
+                        right  = FALSE))
+
+events_par_bin <- acled_violence %>%
+  count(dist_bin, event_type)
+
+bar_bins <- ggplot(events_par_bin,
+                   aes(x = dist_bin, y = n, fill = event_type)) +
+  geom_col(position = "stack") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Number of Violent Events by Distance Bracket",
+       x     = "Distance to nearest city (km)",
+       y     = "Number of events",
+       fill  = "Event type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+bar_bins
+```
+
+```{r}
+# 5. Aggregation by location and correlation
+# Aggregate by location (latitude/longitude rounded to 2 decimals) to avoid counting the same place multiple times
+acled_agg <- acled_violence %>%
+  mutate(lat_r = round(latitude,  2),
+         lon_r = round(longitude, 2)) %>%
+  group_by(lat_r, lon_r) %>%
+  summarise(n_events   = n(),
+            fatalities = sum(fatalities, na.rm = TRUE),
+            dist_km    = first(dist_km),
+            .groups = "drop")
+```
+
+```{r}
+# 6. Correlation plots
+
+#Scatter plot: distance vs. number of events
+scatter_n <- ggplot(acled_agg, aes(x = dist_km, y = n_events)) +
+  geom_point(alpha = 0.4, color = "#2C7BB6", size = 2) +
+  geom_smooth(method = "lm",    color = "red",   se = TRUE,  linewidth = 1) +
+  scale_y_log10(labels = comma) +
+  labs(title    = "Distance to Cities vs. Number of Attacks",
+       subtitle = "Red = linear regression | Dashed = LOESS trend",
+       x        = "Distance to nearest city (km)",
+       y        = "Number of attacks (log scale)") +
+  theme_minimal()
+
+#Scatter plot: distance vs. fatalities
+scatter_f <- ggplot(acled_agg, aes(x = dist_km, y = fatalities + 1)) +
+  geom_point(alpha = 0.4, color = "#D7191C", size = 2) +
+  geom_smooth(method = "lm",    color = "darkred", se = TRUE,  linewidth = 1) +
+  scale_y_log10(labels = comma) +
+  labs(title    = "Distance to Cities vs. Number of Fatalities",
+       subtitle = "+1 added to avoid log(0)",
+       x        = "Distance to nearest city (km)",
+       y        = "Fatalities (log scale)") +
+  theme_minimal()
+
+#Distance bins for boxplot
+acled_agg <- acled_agg %>%
+  mutate(dist_bin = cut(dist_km,
+                        breaks = c(0, 25, 50, 75, 100, 150, 200, 300, Inf),
+                        labels = c("0-25", "25-50", "50-75", "75-100",
+                                   "100-150", "150-200", "200-300", ">300"),
+                        right = FALSE))
+
+#Final patchwork assembly
+scatter_n | scatter_f
+```
+# Both regression lines (red) slope downward, confirming that attacks and fatalities are slightly more frequent closer to cities.
+#The fatalities plot mirrors the same pattern: higher and more dispersed values cluster near 0 km, thinning out beyond 100 km.
+#The wide confidence interval reflects a weak but real signal - distance has a measurable effect, but high variance means other factors are also at play.
+
+
+```{r}
+#7. Map of attacks and distance to cities
+
+# Load country borders using geodata (same as earlier in the script)
+bf_map  <- geodata::gadm(country = "BFA", level = 0, path = tempdir()) %>% st_as_sf()
+mali_map2 <- geodata::gadm(country = "MLI", level = 0, path = tempdir()) %>% st_as_sf()
+niger_map <- geodata::gadm(country = "NER", level = 0, path = tempdir()) %>% st_as_sf()
+
+sahel_map <- bind_rows(bf_map, mali_map2, niger_map)
+
+# Convert acled_agg to spatial object for geom_sf
+acled_agg_sf <- st_as_sf(acled_agg,
+                          coords = c("lon_r", "lat_r"),
+                          crs = 4326)
+
+ggplot() +
+  geom_sf(data = sahel_map, fill = "#E8E4D9", color = "#888888", size = 0.3) +
+  geom_sf(data = acled_agg_sf,
+          aes(size = n_events, color = dist_km),
+          alpha = 0.6) +
+  scale_color_viridis_c(name = "Distance to city (km)",
+                        option = "plasma", direction = -1) +
+  scale_size_continuous(name = "Number of attacks", range = c(1, 8)) +
+  geom_sf(data = villes_sahel, shape = 17, size = 2, color = "red") +
+  labs(title    = "Location of Attacks and Distance to Cities",
+       subtitle = "Red triangles = cities in Burkina Faso, Mali and Niger",
+       caption  = "Source: ACLED 2026",
+       x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    legend.position = "right"
+  )
+```
+
